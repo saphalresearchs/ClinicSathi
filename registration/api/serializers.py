@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from ..models import User, DoctorProfile, PatientProfile, Appointment
+from ..models import User, DoctorProfile, PatientProfile, Appointment, Notification
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -81,8 +81,6 @@ class DoctorRegistrationSerializer(serializers.ModelSerializer):
         doctor = DoctorProfile.objects.create(user=user, **validated_data)
         return doctor
 
-
-
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
@@ -101,21 +99,23 @@ class DoctorSearchSerializer(serializers.ModelSerializer):
         model = User
         fields = ['username', 'specialization']
 
-
 class AppointmentSerializer(serializers.ModelSerializer):
     doctor_username = serializers.CharField(write_only=True)  # Accept doctor username instead of ID
+    patient = serializers.HiddenField(default=serializers.CurrentUserDefault())
     # prescription = serializers.CharField(read_only=True)  # Patients cannot modify this
 
     class Meta:
         model = Appointment
-        fields = ['doctor_username', 'date', 'time', 'status', 'reason', 'token']
+        fields = ['id', 'doctor_username', 'patient', 'date', 'time', 'status', 'reason', 'token']
         read_only_fields = ['status', 'token', 'prescription']
 
     def validate(self, data):
         # Validate doctor existence
         try:
             doctor = User.objects.get(username=data['doctor_username'], role='doctor')
+            # patient = User.objects.get(username=data['patient_username'], role='patient')
             data['doctor'] = doctor
+            # data['patient'] = patient
         except User.DoesNotExist:
             raise serializers.ValidationError("Doctor with the given username does not exist.")
 
@@ -123,7 +123,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if Appointment.objects.filter(
             doctor=data['doctor'],
             date=data['date'],
-            time=data['time']
+            time=data['time'],
+            # patient=data['patient']
         ).exists():
             raise serializers.ValidationError("This time slot is already booked.")
 
@@ -131,5 +132,11 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('doctor_username')  # Remove username after converting to the doctor instance
-        validated_data['patient'] = self.context['request'].user  # Set the logged-in user as the patient
-        return super().create(validated_data)
+        # validated_data['patient'] = self.context['request'].user  # Set the logged-in user as the patient
+        appointment = Appointment.objects.create(**validated_data) 
+        return appointment
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'event_type', 'subject', 'message', 'is_read', 'created_at']

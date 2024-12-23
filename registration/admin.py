@@ -59,10 +59,12 @@ class AppointmentAdmin(admin.ModelAdmin):
     ordering = ['date', 'time', 'token']
 
 
-
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ['recipient', 'subject', 'event_type', 'sent_at']
-    list_filter = ['event_type', 'sent_at']
-    search_fields = ['recipient__username', 'subject']
+    list_display = ('id', 'recipient', 'event_type', 'subject', 'is_read', 'created_at')
+    list_filter = ('event_type', 'is_read', 'created_at')
+    search_fields = ('recipient__username', 'recipient__email', 'subject', 'message')
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at',)
+
 

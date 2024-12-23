@@ -166,3 +166,8 @@ SERVER_EMAIL = 'programmersaphal@gmail.com'
 # Debug email sending during development
 EMAIL_USE_DEBUG = True
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+# MY_ENV_VAR = os.getenv('MY_ENV_VAR')
+BASE_URL = os.getenv("BASE_URL")

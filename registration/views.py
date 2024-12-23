@@ -8,13 +8,16 @@ from .api.serializers import CustomTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListAPIView
 from rest_framework.filters import SearchFilter
-from registration.models import User, Appointment
-#from .utils import send_email_notification
+from registration.models import User, Appointment, Notification
+from .utils import send_email_and_notification
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode  
 from django.utils.encoding import force_bytes
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_decode
+from django.core.exceptions import ObjectDoesNotExist
 import json
-
+from django.conf import settings 
 # Create your views here.
 
 class UserRegistrationView(APIView):
@@ -57,6 +60,7 @@ class DoctorRegistrationView(APIView):
 
         if serializer.is_valid():
             serializer.save()
+            print(serializer.data)
             return Response({'message': 'Doctor registered successfully!'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -113,7 +117,7 @@ class PasswordResetRequestView(APIView):
             token = token_generator.make_token(user)
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
 
-            reset_link = f"{request.scheme}://{request.get_host()}/password-reset/confirm/{uidb64}/{token}/"
+            reset_link = f"{settings.BASE_URL}/password-reset/confirm/{uidb64}/{token}/"
 
             # Send the reset link via email
             send_mail(
@@ -164,7 +168,18 @@ class AppointmentBookingView(APIView):
         serializer = AppointmentSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            appointment=Appointment.objects.get(id=serializer.data.get('id'))
+            # print(serializer.data)
+
+            from .utils import send_email_and_notification
+            send_email_and_notification(
+                recipient=appointment.doctor,
+                subject="New Appointment Created",
+                message=f"You have a new appointment with {appointment.patient.username} on {appointment.date} at {appointment.time}.",
+                event_type="appointment_created"
+            )
+
+            return Response(serializer.data , status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class DoctorManageAppointmentsView(APIView):
@@ -212,9 +227,25 @@ class DoctorManageAppointmentsView(APIView):
         # Notify the patient about the status change (optional)
         if new_status == 'confirmed':
             # Logic to send a confirmation email or notification to the patient
+            # Notify the patient
+            from .utils import send_email_and_notification
+            send_email_and_notification(
+                recipient=appointment.patient,
+                subject="Appointment Confirmed",
+                message=f"Your appointment with Dr. {appointment.doctor.username} on {appointment.date} at {appointment.time} has been confirmed.",
+                event_type="appointment_confirmed"
+            )
             pass
         elif new_status == 'canceled':
             # Logic to send a cancellation email or notification to the patient
+             # Notify the patient
+            from .utils import send_email_and_notification
+            send_email_and_notification(
+                recipient=appointment.patient,
+                subject="Appointment Canceled",
+                message=f"Your appointment with Dr. {appointment.doctor.username} on {appointment.date} at {appointment.time} has been canceled.",
+                event_type="appointment_canceled"
+            )
             pass
 
         serializer = AppointmentSerializer(appointment)
@@ -252,12 +283,27 @@ class PatientCompleteAppointmentView(APIView):
 
         appointment.status = 'completed'
         appointment.save()
+
+        from .utils import send_email_and_notification
+        send_email_and_notification(
+            recipient=appointment.doctor,
+            event_type="Appointment_completed",
+            subject="Appointment Completed",
+            message=f"The appointment with {appointment.patient.username} on {appointment.date} at {appointment.time} has been marked as completed."
+        )
+        
+        # create_notification(
+        #     recipient=appointment.doctor,
+        #     event_type="appointment_completed",
+        #     subject="Appointment Completed",
+        #     message=f"The appointment with {appointment.patient.username} on {appointment.date} at {appointment.time} has been marked as completed."
+        # )
+
+
         return Response({"message": "Appointment marked as completed."})
 
 class DoctorUploadPrescriptionView(APIView):
-
     permission_classes = [IsAuthenticated]
-
     def patch(self, request, appointment_id):
         """
         Allows a doctor to upload a prescription for a completed appointment.
@@ -282,6 +328,15 @@ class DoctorUploadPrescriptionView(APIView):
         # Save the prescription to the appointment
         appointment.prescription = prescription
         appointment.save()
+
+         # Notify the patient
+        from .utils import send_email_and_notification
+        send_email_and_notification(
+            recipient=appointment.patient,
+            subject="Prescription Uploaded",
+            message=f"Dr. {appointment.doctor.username} has uploaded your prescription for the appointment on {appointment.date}.",
+            event_type="prescription_uploaded"
+        )
 
         # Serialize and return the updated appointment data
         serializer = AppointmentSerializer(appointment)
@@ -350,9 +405,102 @@ class PatientRescheduleAppointmentView(APIView):
         appointment.status = 'pending'  # Reset status to pending after rescheduling
         appointment.save()
 
+        from .utils import send_email_and_notification
+        send_email_and_notification(
+            recipient=appointment.doctor,
+            event_type="appointment_rescheduled",
+            subject="Appointment Rescheduled",
+            message=f"The appointment with {appointment.patient.username} has been rescheduled to {new_date} at {new_time}."
+        )
+
         # Serialize and return the updated appointment
         serializer = AppointmentSerializer(appointment)
         return Response(
             {"message": "Appointment rescheduled successfully.", "appointment": serializer.data},
             status=status.HTTP_200_OK
         )
+
+
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(recipient=request.user).order_by('-created_at')
+        notification_data = [
+            {
+                "id": notification.id,
+                "event_type": notification.event_type,
+                "subject": notification.subject,
+                "message": notification.message,
+                "is_read": notification.is_read,
+                "created_at": notification.created_at
+            }
+            for notification in notifications
+        ]
+        return Response(notification_data, status=status.HTTP_200_OK)
+
+class MarkNotificationReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, notification_id):
+        try:
+            notification = Notification.objects.get(id=notification_id, recipient=request.user)
+            notification.is_read = True
+            notification.save()
+            return Response({"message": "Notification marked as read."}, status=status.HTTP_200_OK)
+        except Notification.DoesNotExist:
+            return Response({"error": "Notification not found."}, status=status.HTTP_404_NOT_FOUND)
+
+class PatientAppointmentManagementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Retrieve all appointments for the logged-in patient.
+        """
+        if request.user.role != 'patient':
+            return Response({"error": "Only patients can view their appointments."}, status=status.HTTP_403_FORBIDDEN)
+
+        appointments = Appointment.objects.filter(patient=request.user).order_by('-date', '-time')
+        serializer = AppointmentSerializer(appointments, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, appointment_id):
+        """
+        Allows the patient to mark a 'confirmed' appointment as 'completed'.
+        """
+        if request.user.role != 'patient':
+            return Response({"error": "Only patients can manage their appointments."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            appointment = Appointment.objects.get(id=appointment_id, patient=request.user, status='confirmed')
+        except ObjectDoesNotExist:
+            return Response(
+                {"error": "Appointment not found or it is not confirmed by doctor."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Change the appointment status to 'completed'
+        appointment.status = 'completed'
+        appointment.save()
+
+        # Serialize and return the updated appointment
+        serializer = AppointmentSerializer(appointment)
+        return Response(
+            {"message": "Appointment marked as completed.", "appointment": serializer.data},
+            status=status.HTTP_200_OK
+        )
+    
+class DoctorAppointmentManagementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Retrieve all appointments for the logged-in doctor.
+        """
+        if request.user.role != 'doctor':
+            return Response({"error": "Only doctors can view their appointments."}, status=status.HTTP_403_FORBIDDEN)
+
+        appointments = Appointment.objects.filter(doctor=request.user).order_by('-date', '-time')
+        serializer = AppointmentSerializer(appointments, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

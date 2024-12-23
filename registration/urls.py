@@ -17,7 +17,11 @@ from .views import (
     PasswordResetConfirmView,
     PasswordResetRequestView,
     DoctorUploadPrescriptionView,
-    PatientRescheduleAppointmentView
+    PatientRescheduleAppointmentView,
+    NotificationListView,
+    MarkNotificationReadView,
+    PatientAppointmentManagementView,
+    DoctorAppointmentManagementView
 )
 urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -39,5 +43,9 @@ urlpatterns = [
     path('appointments/<int:appointment_id>/', PatientCompleteAppointmentView.as_view(), name='patient-appointment-info'),
     path('appointments/<int:appointment_id>/upload-prescription/', DoctorUploadPrescriptionView.as_view(), name='upload-prescription'),
     path('appointments/<int:appointment_id>/reschedule/', PatientRescheduleAppointmentView.as_view(), name='reschedule-appointment'),
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/read/<int:notification_id>/', MarkNotificationReadView.as_view(), name='mark-notification-read'),
+    path('appointments/patient/', PatientAppointmentManagementView.as_view(), name='patient-appointments'),
+    path('appointments/doctor/', DoctorAppointmentManagementView.as_view(), name='doctor-appointments'),
 
 ]

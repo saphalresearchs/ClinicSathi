@@ -148,18 +148,26 @@ class Appointment(models.Model):
     def __str__(self):
         return f"Appointment with Dr. {self.doctor.username} for {self.patient.username} on {self.date} at {self.time} - Status: {self.status}"
 
+
 class Notification(models.Model):
+    EVENT_CHOICES = [
+        ('appointment_confirmed', 'Appointment Confirmed'),
+        ('appointment_canceled', 'Appointment Canceled'),
+        ('prescription_uploaded', 'Prescription Uploaded'),
+        ('appointment_created', 'Appointment Created'),
+        ('appointment_rescheduled', 'Appointment Rescheduled'),
+    ]
+
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='notifications'
     )
+    event_type = models.CharField(max_length=50, choices=EVENT_CHOICES)
     subject = models.CharField(max_length=255)
     message = models.TextField()
-    sent_at = models.DateTimeField(auto_now_add=True)
-    event_type = models.CharField(max_length=50)  # E.g., 'appointment_created', 'prescription_uploaded'
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Notification to {self.recipient.username} - {self.subject}"
-
-
+        return f"Notification for {self.recipient.username} - {self.event_type}"
