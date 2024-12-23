@@ -589,3 +589,33 @@ class PasswordChangeView(APIView):
         update_last_login(None, user)
 
         return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
+
+from django.http import JsonResponse
+
+def options_response(request):
+    response = JsonResponse({'message': 'CORS preflight response'})
+    response["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+    response["Access-Control-Allow-Credentials"] = "true"
+    return response
+
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+
+@csrf_exempt
+def login_view(request):
+    if request.method == "OPTIONS":
+        response = JsonResponse({'message': 'CORS preflight'})
+        response["Access-Control-Allow-Origin"] = "http://localhost:3000"
+        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response
+
+    if request.method == "POST":
+        # Your login logic here
+        response = JsonResponse({'message': 'Login successful'})
+        response["Access-Control-Allow-Origin"] = "http://localhost:3000"
+        response["Access-Control-Allow-Credentials"] = "true"
+        return response

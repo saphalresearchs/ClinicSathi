@@ -171,3 +171,27 @@ from dotenv import load_dotenv
 load_dotenv()
 # MY_ENV_VAR = os.getenv('MY_ENV_VAR')
 BASE_URL = os.getenv("BASE_URL")
+
+
+
+# @csrf_exempt 
+# @require_http_methods(["GET", "POST"]) 
+# def login_view(request): 
+#     response = HttpResponse(json.dumps({"message": "Login successful"}), content_type="application/json") 
+#     response['Access-Control-Allow-Origin'] = 'http://localhost:3000/' 
+#     return response
+
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_ALL_ORIGINS = False  # Set to True to allow all origins
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+]
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'Authorization',  # Add this if you need to send JWT tokens in the Authorization header
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+
