@@ -31,9 +31,9 @@ class CustomUserAdmin(UserAdmin):
 # DoctorProfile Admin
 @admin.register(DoctorProfile)
 class DoctorProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'specialization', 'license_number')
+    list_display = ('user', 'specialization', 'license_number', 'phone', 'clinic_address', 'google_map_link')
+    search_fields = ('user__username', 'specialization', 'license_number', 'clinic_address', 'user__email')
     list_filter = ('specialization',)
-    search_fields = ('user__username', 'user__email', 'license_number')
 
     def get_queryset(self, request):
         # Ensure only doctor profiles appear here
@@ -66,5 +66,4 @@ class NotificationAdmin(admin.ModelAdmin):
     search_fields = ('recipient__username', 'recipient__email', 'subject', 'message')
     ordering = ('-created_at',)
     readonly_fields = ('created_at',)
-
 

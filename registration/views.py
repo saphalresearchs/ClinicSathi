@@ -2,13 +2,13 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .api.serializers import UserRegistrationSerializer, PatientRegistrationSerializer, DoctorRegistrationSerializer, AppointmentSerializer
+from .api.serializers import UserRegistrationSerializer, PatientRegistrationSerializer, DoctorRegistrationSerializer, AppointmentSerializer, DoctorProfileSerializer, PublicDoctorProfileSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .api.serializers import CustomTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListAPIView
 from rest_framework.filters import SearchFilter
-from registration.models import User, Appointment, Notification
+from registration.models import User, Appointment, Notification, DoctorProfile
 from .utils import send_email_and_notification
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_encode  
@@ -18,6 +18,7 @@ from django.utils.http import urlsafe_base64_decode
 from django.core.exceptions import ObjectDoesNotExist
 import json
 from django.conf import settings 
+from django.contrib.auth.models import update_last_login
 # Create your views here.
 
 class UserRegistrationView(APIView):
@@ -64,6 +65,41 @@ class DoctorRegistrationView(APIView):
             return Response({'message': 'Doctor registered successfully!'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class DoctorProfileManagementView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Retrieve the logged-in doctor's profile.
+        """
+        if request.user.role != 'doctor':
+            return Response({"error": "Only doctors can view their profile."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            profile = DoctorProfile.objects.get(user=request.user)
+            serializer = DoctorProfileSerializer(profile)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except DoctorProfile.DoesNotExist:
+            return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request):
+        """
+        Update the logged-in doctor's profile.
+        """
+        if request.user.role != 'doctor':
+            return Response({"error": "Only doctors can update their profile."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            profile = DoctorProfile.objects.get(user=request.user)
+        except DoctorProfile.DoesNotExist:
+            return Response({"error": "Profile not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = DoctorProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -251,7 +287,6 @@ class DoctorManageAppointmentsView(APIView):
         serializer = AppointmentSerializer(appointment)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
 class PatientCompleteAppointmentView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -291,15 +326,6 @@ class PatientCompleteAppointmentView(APIView):
             subject="Appointment Completed",
             message=f"The appointment with {appointment.patient.username} on {appointment.date} at {appointment.time} has been marked as completed."
         )
-        
-        # create_notification(
-        #     recipient=appointment.doctor,
-        #     event_type="appointment_completed",
-        #     subject="Appointment Completed",
-        #     message=f"The appointment with {appointment.patient.username} on {appointment.date} at {appointment.time} has been marked as completed."
-        # )
-
-
         return Response({"message": "Appointment marked as completed."})
 
 class DoctorUploadPrescriptionView(APIView):
@@ -344,7 +370,6 @@ class DoctorUploadPrescriptionView(APIView):
             {"message": "Prescription uploaded successfully.", "appointment": serializer.data},
             status=status.HTTP_200_OK
         )
-    
 
 class PatientRescheduleAppointmentView(APIView):
     permission_classes = [IsAuthenticated]
@@ -420,7 +445,6 @@ class PatientRescheduleAppointmentView(APIView):
             status=status.HTTP_200_OK
         )
 
-
 class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -492,6 +516,7 @@ class PatientAppointmentManagementView(APIView):
         )
     
 class DoctorAppointmentManagementView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -504,3 +529,63 @@ class DoctorAppointmentManagementView(APIView):
         appointments = Appointment.objects.filter(doctor=request.user).order_by('-date', '-time')
         serializer = AppointmentSerializer(appointments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DoctorProfilePublicView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, doctor_id=None):
+        """
+        Retrieve all doctor profiles or a specific doctor profile.
+        """
+        if doctor_id:
+            # Fetch a specific doctor's profile
+            try:
+                profile = DoctorProfile.objects.get(user_id=doctor_id)
+                serializer = PublicDoctorProfileSerializer(profile)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except DoctorProfile.DoesNotExist:
+                return Response({"error": "Doctor profile not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            name = request.query_params.get('name', '').strip().lower()
+            specialization = request.query_params.get('specialization', '').strip().lower()
+            
+            # Fetch all doctor profiles
+            profiles = DoctorProfile.objects.all()
+
+            if name:
+                profiles = profiles.filter(user__username__icontains=name)
+
+            if specialization:
+                profiles = profiles.filter(specialization__icontains=specialization)
+            
+            serializer = PublicDoctorProfileSerializer(profiles, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+class PasswordChangeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Allows the authenticated user to change their password.
+        """
+        user = request.user
+        current_password = request.data.get('current_password')
+        new_password = request.data.get('new_password')
+
+        # Validate current password
+        if not user.check_password(current_password):
+            return Response({"error": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate new password
+        if not new_password or len(new_password) < 8:
+            return Response({"error": "New password must be at least 8 characters long."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Set the new password
+        user.set_password(new_password)
+        user.save()
+
+        # Optional: Update last login to reflect the change
+        update_last_login(None, user)
+
+        return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)

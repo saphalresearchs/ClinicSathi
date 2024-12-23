@@ -99,6 +99,8 @@ class DoctorProfile(models.Model):
     certificate_picture = models.ImageField(upload_to='doctor_certificates/')
     license_number = models.CharField(max_length=50)
     phone = models.CharField(max_length=15)
+    clinic_address = models.TextField(blank=True, null=True)  
+    google_map_link = models.URLField(blank=True, null=True)
 
     def __str__(self):
         return f"Dr. {self.user.username} - {self.specialization}"

@@ -33,7 +33,8 @@ class UserDetailSerializer(serializers.ModelSerializer):
 class DoctorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorProfile
-        fields = ['specialization', 'profile_picture', 'certificate_picture', 'license_number', 'phone']
+        fields = ['specialization', 'profile_picture', 'certificate_picture', 'license_number', 'phone', 'clinic_address',
+            'google_map_link']
 
 class PatientProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -140,3 +141,20 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'event_type', 'subject', 'message', 'is_read', 'created_at']
+
+
+class PublicDoctorProfileSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+
+    class Meta:
+        model = DoctorProfile
+        fields = [
+            'user_username',
+            'user_email',
+            'specialization',
+            'profile_picture',
+            'phone',
+            'clinic_address',
+            'google_map_link'
+        ]
