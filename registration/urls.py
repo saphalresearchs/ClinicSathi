@@ -3,6 +3,9 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+
+from .disease_prediction import predict_disease
+
 from .views import (
     UserRegistrationView, 
     CustomTokenObtainPairView, 
@@ -26,6 +29,7 @@ from .views import (
     DoctorProfilePublicView,
     PasswordChangeView
 )
+
 urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
@@ -54,6 +58,7 @@ urlpatterns = [
     path('doctors/', DoctorProfilePublicView.as_view(), name='doctor-list'),
     path('doctors/<int:doctor_id>/', DoctorProfilePublicView.as_view(), name='doctor-detail'),
     path('password-change/', PasswordChangeView.as_view(), name='password-change'),
+    path('predict/', predict_disease, name='predict_disease'),
 
 
 ]
