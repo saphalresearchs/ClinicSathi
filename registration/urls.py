@@ -59,6 +59,7 @@ urlpatterns = [
     path('doctors/<int:doctor_id>/', DoctorProfilePublicView.as_view(), name='doctor-detail'),
     path('password-change/', PasswordChangeView.as_view(), name='password-change'),
     path('predict/', predict_disease, name='predict_disease'),
+    
 
 
 ]
