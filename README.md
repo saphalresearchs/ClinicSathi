@@ -27,4 +27,5 @@ I have also created Disease Prediction frontend using Streamlit u can access it 
 
 ### Disease Prediction Dashboard
 cd registration
+
 streamlit run disease_prediction_app.py
